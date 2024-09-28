@@ -1,61 +1,116 @@
 package main
 
 import (
-  "fmt"
-  "math"
-  "sync"
+    "fmt"
+    "math"
+    "sync"
 )
 
-// Функция для проверки простого числа
-func isPrime(n int) bool {
-  if n < 2 {
-    return false
-  }
-  for i := 2; i <= int(math.Sqrt(float64(n))); i++ {
-    if n%i == 0 {
-      return false
-    }
-  }
-  return true
+type Task func() // Тип для задания
+
+// Структура пула задач с мьютексом для безопасной работы с потоками
+type TaskPool struct {
+    tasks []Task
+    mu    sync.Mutex
 }
 
-// Функция задачи, проверяющая простоту числа
-func primeTask(n int, wg *sync.WaitGroup, ch chan int) {
-  defer wg.Done() // Уменьшаем счетчик WaitGroup при завершении задачи
-  if isPrime(n) {
-    ch <- n // Отправляем простое число в канал
-  }
+// Интерфейс для пула задач
+type ITaskPool interface {
+    NextTask() Task
+    Push(Task)
+}
+
+// Интерфейс для выполнения задач
+type Executor interface {
+    ExecNext()
+}
+
+// Метод добавления задачи в пул
+func (tp *TaskPool) AddTask(t Task) {
+    tp.mu.Lock()
+    tp.tasks = append(tp.tasks, t)
+    tp.mu.Unlock()
+}
+
+// Метод получения следующей задачи
+func (tp *TaskPool) GetNextTask() Task {
+    tp.mu.Lock()
+    defer tp.mu.Unlock()
+
+    if len(tp.tasks) == 0 {
+        return nil
+    }
+
+    nextTask := tp.tasks[0]
+    tp.tasks = tp.tasks[1:]
+    return nextTask
+}
+
+// Метод выполнения следующей задачи
+func (tp *TaskPool) ExecuteNext() {
+    task := tp.GetNextTask()
+    if task != nil {
+        task()
+    }
+}
+
+// Глобальные переменные для хранения простых чисел и их количества
+var primeNumbers []int
+var totalPrimes int
+var primeMu sync.Mutex
+
+// Функция для проверки простого числа
+func isNumberPrime(n int) bool {
+    if n < 2 {
+        return false
+    }
+    for _, prime := range primeNumbers {
+        if prime > int(math.Sqrt(float64(n))) {
+            break
+        }
+        if n%prime == 0 {
+            return false
+        }
+    }
+    return true
+}
+
+// Создание задачи для проверки числа на простоту
+func createPrimeCheckTask(n int) Task {
+    return func() {
+        if isNumberPrime(n) {
+            primeMu.Lock()
+            primeNumbers = append(primeNumbers, n)
+            totalPrimes++
+            primeMu.Unlock()
+        }
+    }
+}
+
+// Генерация последовательности чисел от 1 до n
+func generateNumbers(limit int) []int {
+    numbers := make([]int, limit)
+    for i := 0; i < limit; i++ {
+        numbers[i] = i + 1
+    }
+    return numbers
 }
 
 func main() {
-  // Массив чисел для проверки
-  numbers := []int{2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
+    numbers := generateNumbers(10) // Генерация чисел от 1 до 10
+    var pool TaskPool               // Инициализация пула задач
 
-  // Канал для хранения простых чисел
-  ch := make(chan int, len(numbers))
+    // Добавление задач для каждого числа
+    for _, n := range numbers {
+        pool.AddTask(createPrimeCheckTask(n))
+    }
 
-  // WaitGroup для синхронизации задач
-  var wg sync.WaitGroup
+    // Выполнение задач, пока не закончатся
+    for len(pool.tasks) > 0 {
+        pool.ExecuteNext()
+    }
 
-  // Для каждого числа создаем задачу
-  for _, num := range numbers {
-    wg.Add(1)
-    go primeTask(num, &wg, ch)
-  }
-
-  // Ждем завершения всех задач
-  wg.Wait()
-
-  // Закрываем канал, так как все горутины завершены
-  close(ch)
-
-  // Вывод всех простых чисел
-  primes := []int{}
-  for prime := range ch {
-    primes = append(primes, prime)
-  }
-
-  // Выводим результат
-  fmt.Printf("Количество простых чисел: %d\n", len(primes))
-  fmt.Printf("Простые числа: %v\n", primes)
+    // Вывод результата
+    fmt.Printf("Общее количество простых чисел: %d\n", totalPrimes)
+    fmt.Println("Простые числа:", primeNumbers)
 }
