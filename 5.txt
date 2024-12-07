@@ -13,15 +13,13 @@ Type=oneshot
 [Install]
 WantedBy=multi-user.target
 
-sudo cmhod 644 /etc/systemd/system/repair-eth.service
+sudo chmod 644 /etc/systemd/system/repair-eth.service
 sudo systemctl daemon-reload
-sudo systemctl enable repair_eth.sh
-sudo systemctl status repair_eth.sh
+sudo systemctl enable repair-eth.service
+sudo systemctl status repair-eth.service
 
 chmod +x /home/user/repair_eth.sh
-sudo systemctl start repair_eth.sh
-sudo systemctl status repair_eth.sh
+sudo systemctl start repair-eth.service
+sudo systemctl status repair-eth.service
 
 sudo reboot
-
-Может работать не у всех — зависит от того, как и куда вы создавали файл. Если у вас не работает, то извините решение искать самим.
